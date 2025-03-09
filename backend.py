@@ -29,5 +29,4 @@ def chat():
     return jsonify({"response": ai_response})
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Use Render's assigned port or default to 5000
-    
+    print("Backend is running!")
