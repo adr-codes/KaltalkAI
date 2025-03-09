@@ -3,12 +3,8 @@ from flask_cors import CORS
 import requests
 import os
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Use Render's assigned port or default to 5000
-    app.run(host="0.0.0.0", port=port, debug=False)
-
-app = Flask(__name__)
-CORS(app)  # Allow Flutter to access this API
+app = Flask(__name__)  # Define the app BEFORE running it
+CORS(app)  # Allow cross-origin requests
 
 # Replace with your OpenRouter API key
 API_KEY = "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"
@@ -33,4 +29,5 @@ def chat():
     return jsonify({"response": ai_response})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))  # Use Render's assigned port or default to 5000
+    app.run(host="0.0.0.0", port=port, debug=False)
