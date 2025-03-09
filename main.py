@@ -1,3 +1,10 @@
+from kivy.config import Config
+
+# Set a default size for mobile emulation (remove this when running on an actual phone)
+Config.set("graphics", "width", "360")  # Typical mobile width
+Config.set("graphics", "height", "640")  # Typical mobile height
+Config.set("graphics", "resizable", "0")  # Disable resizing for a fixed aspect ratio
+
 import requests
 import speech_recognition as sr
 from kivy.app import App
@@ -38,27 +45,25 @@ class ChatBubble(Label):
         self.texture_update()
         self.height = self.texture_size[1] + 20
 
-
-
 class ChatApp(App):
     def build(self):
         self.layout = BoxLayout(orientation='vertical', padding=10, spacing=5)
 
         # Scrollable chat history
-        self.scroll_view = ScrollView()
+        self.scroll_view = ScrollView(size_hint=(1, 0.85))  # Adjust height to fit mobile layout
         self.chat_history = GridLayout(cols=1, size_hint_y=None, spacing=5)
         self.chat_history.bind(minimum_height=self.chat_history.setter('height'))
         self.scroll_view.add_widget(self.chat_history)
 
         # Input field, send button, and mic button
-        input_layout = BoxLayout(size_hint_y=None, height=50, spacing=5)
-        self.user_input = TextInput(hint_text="Type your message...", multiline=True, size_hint_x=0.7)
+        input_layout = BoxLayout(size_hint_y=None, height=60, spacing=5, padding=(5, 5))
+        self.user_input = TextInput(hint_text="Type your message...", multiline=True, size_hint_x=0.65, height=50)
         self.user_input.bind(text=self.adjust_input_height)
         
-        send_button = Button(text="Send", size_hint_x=0.15)
+        send_button = Button(text="Send", size_hint_x=0.2, height=50)
         send_button.bind(on_release=self.send_message)
 
-        mic_button = Button(text="🎤", size_hint_x=0.15)
+        mic_button = Button(text="🎤", size_hint_x=0.15, height=50)
         mic_button.bind(on_release=self.voice_input)
 
         input_layout.add_widget(self.user_input)
@@ -71,7 +76,7 @@ class ChatApp(App):
         return self.layout
 
     def adjust_input_height(self, instance, value):
-        max_height = 150  # Limit to about 5 lines
+        max_height = 120  # Adjusted for mobile screens
         min_height = 50   # Default height
         num_lines = value.count("\n") + 1  # Count lines based on newlines
         line_height = self.user_input.line_height
@@ -86,7 +91,7 @@ class ChatApp(App):
 
         # Send to backend
         try:
-            response = requests.post("http://127.0.0.1:5000/chat", json={"message": user_message})
+            response = requests.post("https://kaltalkai.onrender.com", json={"message": user_message})
             bot_reply = response.json().get("response", "Error: No response")
         except Exception:
             bot_reply = "Error: Could not connect to server."
