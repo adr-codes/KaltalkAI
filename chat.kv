@@ -1,0 +1,28 @@
+BoxLayout:
+    orientation: 'vertical'
+    padding: dp(10)
+    spacing: dp(5)
+
+    ScrollView:
+        GridLayout:
+            id: chat_history
+            cols: 1
+            size_hint_y: None
+            height: self.minimum_height
+            spacing: dp(5)
+
+    BoxLayout:
+        size_hint_y: None
+        height: dp(50)
+        spacing: dp(5)
+
+        TextInput:
+            id: user_input
+            hint_text: "Type your message..."
+            multiline: False
+            size_hint_x: 0.8
+
+        Button:
+            text: "Send"
+            size_hint_x: 0.2
+            on_release: app.send_message()
