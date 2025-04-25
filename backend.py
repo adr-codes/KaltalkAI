@@ -1,12 +1,13 @@
 from flask import Flask, request, jsonify
 import requests
+import os
 
 sessions = {}
 
 app = Flask(__name__)
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-API_KEY = "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"  # your key here
+API_KEY = os.environ.get("OPENROUTER_API_KEY")  # your key here
 MODEL_NAME = "sophosympatheia/rogue-rose-103b-v0.2:free"
 
 SYSTEM_PROMPT = """You are KaltalkAI, a virtual AI companion. Be cheerful, kind, and positive in every conversation.

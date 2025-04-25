@@ -129,7 +129,7 @@ class ChatApp(App):
         self.add_message(user_message, align="right")
 
         try:
-            response = requests.post("http://127.0.0.1:5000/chat", json={"message": user_message,
+            response = requests.post("https://kaltalkai.onrender.com/chat", json={"message": user_message,
                                                                          "session_id": self.session_id})
             bot_reply = response.json().get("response", "Error: No response")
         except Exception:
