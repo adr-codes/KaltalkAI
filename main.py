@@ -21,8 +21,10 @@ from kivy.graphics import Color, RoundedRectangle, Rectangle
 from kivy.uix.image import Image
 from kivy.graphics import Rectangle
 from kivy.uix.relativelayout import RelativeLayout
+import uuid
+import requests
 
-
+session_id = str(uuid.uuid4())
 
 AI_NAME = "KaltalkAI"  # Define the AI assistant's name
 
@@ -62,6 +64,7 @@ class ChatBubble(Label):
 class ChatApp(App):
     
     def build(self):
+        self.session_id = str(uuid.uuid4())
         root = RelativeLayout()
 
         # Draw background image BEFORE anything else
@@ -126,7 +129,8 @@ class ChatApp(App):
         self.add_message(user_message, align="right")
 
         try:
-            response = requests.post("http://127.0.0.1:5000/chat", json={"message": user_message})
+            response = requests.post("http://127.0.0.1:5000/chat", json={"message": user_message,
+                                                                         "session_id": self.session_id})
             bot_reply = response.json().get("response", "Error: No response")
         except Exception:
             bot_reply = "Error: Could not connect to server."

@@ -1,39 +1,62 @@
 from flask import Flask, request, jsonify
 import requests
 
+sessions = {}
+
 app = Flask(__name__)
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-API_KEY = "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"  # Replace this with your actual OpenRouter API key
-SYSTEM_PROMPT = f"You are KaltalkAI,a virtual ai companion. Be cheerful, kind, and positive in every conversation. Your main goal is to lift the user’s spirits and engage them in friendly, lighthearted chat. Always offer a warm greeting, ask about their day, and keep the mood upbeat. You can tell jokes, share fun facts, or offer a listening ear to help them feel comfortable. But remember, every conversation is a fresh start, so don’t recall any previous chats."
+API_KEY = "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"  # your key here
+MODEL_NAME = "sophosympatheia/rogue-rose-103b-v0.2:free"
+
+SYSTEM_PROMPT = """You are KaltalkAI, a virtual AI companion. Be cheerful, kind, and positive in every conversation.
+                Use casual and friendly language, not robotic or overly formal.
+                Your main goal is to lift the user’s spirits and engage them in friendly, lighthearted chat.
+                Always offer a warm greeting, ask about their day, and keep the mood upbeat.
+                You can tell jokes, share fun facts, or offer a listening ear to help them feel comfortable.
+                Be smart enough to understand jokes and be creative in your responses."""
 
 HEADERS = {
+
     "Authorization": f"Bearer {API_KEY}",
     "Content-Type": "application/json"
 }
-MODEL_NAME = "sophosympatheia/rogue-rose-103b-v0.2:free"  # Free model you're using
 
+# Keeps history per session ID
+chat_sessions = {}
 
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json()
     user_message = data.get("message", "").strip()
+    session_id = data.get("session_id", "default")  # Use "default" if none provided
 
     if not user_message:
         return jsonify({"response": "I'm here to help. What would you like to ask?"})
 
+    # Initialize session if it doesn't exist yet
+    if session_id not in sessions:
+        sessions[session_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    # Add user message to session
+    sessions[session_id].append({"role": "user", "content": user_message})
+
     payload = {
         "model": MODEL_NAME,
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                     {"role": "user", "content": user_message}]
+        "messages": sessions[session_id]  # Full history
     }
 
     try:
         response = requests.post(OPENROUTER_API_URL, json=payload, headers=HEADERS)
+        print(response.status_code)
+        print(response.text)
+
         response_data = response.json()
 
         if "choices" in response_data and len(response_data["choices"]) > 0:
             ai_reply = response_data["choices"][0]["message"]["content"]
+            # Add AI reply to the session history
+            sessions[session_id].append({"role": "assistant", "content": ai_reply})
         else:
             ai_reply = "Sorry, I couldn't process that."
 
@@ -42,6 +65,5 @@ def chat():
 
     return jsonify({"response": ai_reply})
 
-
-if __name__ == "__main__":
-    app.run(debug=True)
+#if __name__ == "__main__":
+#    app.run(debug=True)
