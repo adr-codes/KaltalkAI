@@ -1,3 +1,4 @@
+#:kivy 2.2.1
 BoxLayout:
     orientation: 'vertical'
     padding: dp(10)
@@ -13,16 +14,29 @@ BoxLayout:
 
     BoxLayout:
         size_hint_y: None
-        height: dp(50)
+        height: max(dp(50), min(user_input.height + dp(10), dp(120)))
         spacing: dp(5)
 
         TextInput:
             id: user_input
             hint_text: "Type your message..."
-            multiline: False
+            multiline: True
             size_hint_x: 0.8
+            size_hint_y: None
+            height: self.minimum_height
+            min_height: dp(50)
+            max_height: dp(120)
+            padding: (dp(10), dp(10))
+            on_text:
+                app.adjust_input_height(self, self.text)
 
         Button:
             text: "Send"
-            size_hint_x: 0.2
-            on_release: app.send_message()
+            size_hint_x: 0.15
+            height: dp(50)
+
+        Button:
+            text: "🎤"
+            size_hint_x: 0.05
+            height: dp(50)
+            font_name: "EmojiFont"
