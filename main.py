@@ -1,3 +1,4 @@
+from tkinter import Image
 from kivy.config import Config
 Config.set("graphics", "width", "360")
 Config.set("graphics", "height", "640")
@@ -137,13 +138,13 @@ class ChatApp(App):
         send_button.bind(on_release=self.send_message)
 
         mic_button = Button(
-            text="🎤",
-            size_hint_x=0.05,
+            size_hint_x=0.15,
             height=dp(50),
-            font_name="EmojiFont"
+            background_normal='mic-button.png',
+            background_down='mic-button-pressed.png'
         )
         mic_button.bind(on_release=self.voice_input)
-
+        
         input_layout.add_widget(self.user_input)
         input_layout.add_widget(send_button)
         input_layout.add_widget(mic_button)
@@ -158,7 +159,7 @@ class ChatApp(App):
         """Ensures chat stays properly aligned during all resizes"""
         if self.user_input.height > dp(50):  # If expanded
             self.scroll_view.scroll_y = 0
-            
+
     def adjust_input_height(self, instance, value):
         """Adjusts text input height and properly pushes chat history up"""
         # Calculate new height
@@ -193,7 +194,7 @@ class ChatApp(App):
             self.scroll_view.scroll_y = 0
 
     def start_conversation(self):
-        self.add_message(f"Hey there! I'm {AI_NAME}, your personal AI buddy. What can I do for you today?", align="left")
+        self.add_message(f"Hey there! What can I do for you today?", align="left")
 
     def send_message(self, instance=None):
         user_message = self.user_input.text.strip()
@@ -279,17 +280,24 @@ class ChatApp(App):
 
     def voice_input(self, instance=None):
         recognizer = sr.Recognizer()
-        with sr.Microphone() as source:
-            self.add_message("Listening...", align="left")
-            try:
-                audio = recognizer.listen(source, timeout=5)
-                user_message = recognizer.recognize_google(audio)
-                self.user_input.text = user_message  
-                self.send_message()
-            except sr.UnknownValueError:
-                self.add_message("Could not understand audio", align="left")
-            except sr.RequestError:
-                self.add_message("Speech service unavailable", align="left")
+        self.add_message("Listening...", align="left")  # Show immediately
+
+        try:
+            with sr.Microphone() as source:
+                try:
+                    audio = recognizer.listen(source, timeout=5)
+                    user_message = recognizer.recognize_google(audio)
+                    self.user_input.text = user_message  
+                    self.send_message()
+                except sr.UnknownValueError:
+                    self.add_message("Sorry, I couldn't understand that.", align="left")
+                except sr.RequestError:
+                    self.add_message("Speech service unavailable.", align="left")
+                except sr.WaitTimeoutError:
+                    self.add_message("No speech detected. Try again.", align="left")
+        except Exception as e:
+            self.add_message(f"Mic error: {str(e)}", align="left")
+
 
     def update_bg(self, *args):
         self.bg.size = args[0].size
