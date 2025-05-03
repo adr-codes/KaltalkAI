@@ -22,10 +22,58 @@ from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.animation import Animation
 from kivy.clock import Clock
+import platform
+# Check if running on Android
+IS_ANDROID = platform.system() == 'Linux' and platform.machine().startswith('arm')
+
+if IS_ANDROID:
+    from android.permissions import request_permissions, Permission
+    from jnius import autoclass, cast
+    from android import activity
+
+    # Request permissions on Android
+    request_permissions([Permission.RECORD_AUDIO, Permission.INTERNET])
+
+def listen_and_recognize(callback):
+    if IS_ANDROID:
+        # Android-specific voice recognition
+        start_android_voice_recognition(callback)
+    else:
+        # PC-specific voice recognition
+        r = sr.Recognizer()
+        with sr.Microphone() as source:
+            print("Say something:")
+            audio = r.listen(source)
+            try:
+                text = r.recognize_google(audio)
+                callback(text)
+            except Exception as e:
+                callback(f"Error: {e}")
+def start_android_voice_recognition(callback):
+    def on_result(requestCode, resultCode, intent_data):
+        if resultCode == -1:  # RESULT_OK
+            results = intent_data.getStringArrayListExtra(
+                SpeechRecognizer.RESULTS_RECOGNITION)
+            if results and len(results) > 0:
+                Clock.schedule_once(lambda dt: callback(results[0]))
+        
+        activity.unbind(on_activity_result=on_result)
+    
+    activity.bind(on_activity_result=on_result)
+    
+    Intent = autoclass('android.content.Intent')
+    SpeechRecognizer = autoclass('android.speech.SpeechRecognizer')
+    
+    intent = Intent(SpeechRecognizer.ACTION_RECOGNIZE_SPEECH)
+    intent.putExtra(SpeechRecognizer.EXTRA_LANGUAGE_MODEL,
+                   SpeechRecognizer.LANGUAGE_MODEL_FREE_FORM)
+    
+    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+    currentActivity = cast('android.app.Activity', PythonActivity.mActivity)
+    currentActivity.startActivityForResult(intent, 1001)
 
 session_id = str(uuid.uuid4())
 Window.softinput_mode = 'pan'
-AI_NAME = "KaltalkAI"
 
 LabelBase.register(name="EmojiFont", fn_regular="NotoColorEmoji-Regular.ttf")
 
@@ -85,6 +133,7 @@ class ChatApp(App):
         return False
 
     def build(self):
+        self.recognizer =sr.Recognizer()
         self.session_id = str(uuid.uuid4())
         root = RelativeLayout()
 
@@ -139,7 +188,7 @@ class ChatApp(App):
 
         mic_button = Button(
             size_hint_x=0.15,
-            height=dp(50),
+            height=dp(40),
             background_normal='mic-button.png',
             background_down='mic-button-pressed.png'
         )
@@ -159,7 +208,12 @@ class ChatApp(App):
         """Ensures chat stays properly aligned during all resizes"""
         if self.user_input.height > dp(50):  # If expanded
             self.scroll_view.scroll_y = 0
-
+    def listen_for_audio(self):
+        # Show "Listening..." first
+        self.display_message("Listening...", "ai")
+        
+        # Then delay the actual listening slightly to let the UI update
+        Clock.schedule_once(lambda dt: self.voice_input(), 0.1)
     def adjust_input_height(self, instance, value):
         """Adjusts text input height and properly pushes chat history up"""
         # Calculate new height
@@ -278,26 +332,127 @@ class ChatApp(App):
         instance.height = instance.texture_size[1] + 20
         container.height = instance.height
 
-    def voice_input(self, instance=None):
+    def _start_listening(self):
         recognizer = sr.Recognizer()
-        self.add_message("Listening...", align="left")  # Show immediately
-
         try:
             with sr.Microphone() as source:
                 try:
                     audio = recognizer.listen(source, timeout=5)
                     user_message = recognizer.recognize_google(audio)
-                    self.user_input.text = user_message  
-                    self.send_message()
+                    Clock.schedule_once(lambda dt: self._handle_voice_result(user_message), 0)
                 except sr.UnknownValueError:
-                    self.add_message("Sorry, I couldn't understand that.", align="left")
+                    Clock.schedule_once(lambda dt: self.add_message("Sorry, I couldn't understand that.", align="left"), 0)
                 except sr.RequestError:
-                    self.add_message("Speech service unavailable.", align="left")
+                    Clock.schedule_once(lambda dt: self.add_message("Speech service unavailable.", align="left"), 0)
                 except sr.WaitTimeoutError:
-                    self.add_message("No speech detected. Try again.", align="left")
+                    Clock.schedule_once(lambda dt: self.add_message("No speech detected. Try again.", align="left"), 0)
         except Exception as e:
-            self.add_message(f"Mic error: {str(e)}", align="left")
+            Clock.schedule_once(lambda dt: self.add_message(f"Mic error: {str(e)}", align="left"), 0)
 
+    def _handle_voice_result(self, text):
+        self.user_input.text = text
+        self.send_message()
+
+    def voice_input(self, instance=None):
+        # Show "Listening..." message immediately
+        self.listening_bubble = ChatBubble("Listening...", align="left")
+        self.listening_container = BoxLayout(size_hint_y=None, height=self.listening_bubble.height)
+        self.listening_bubble.bind(texture_size=lambda instance, value: self.update_bubble_height(instance, value, self.listening_container))
+        self.listening_container.add_widget(self.listening_bubble)
+        self.listening_container.add_widget(Label(size_hint_x=0.2))
+        self.chat_history.add_widget(self.listening_container)
+        self.chat_history.height += self.listening_bubble.height + 10
+        self.scroll_view.scroll_y = 0
+        
+        # Start recognition
+        threading.Thread(target=self._start_voice_recognition).start()
+    def _pc_voice_recognition(self):
+        r = sr.Recognizer()
+        with sr.Microphone() as source:
+            try:
+                audio = r.listen(source, timeout=5)
+                text = r.recognize_google(audio)
+                Clock.schedule_once(lambda dt: self._handle_voice_result(text))
+            except Exception as e:
+                Clock.schedule_once(lambda dt: self.add_message(f"Error: {str(e)}", align="left"))
+    def voice_input(self, instance=None):
+        # Show "Listening..." message immediately
+        self.listening_bubble = ChatBubble("Listening...", align="left")
+        self.listening_container = BoxLayout(size_hint_y=None, height=self.listening_bubble.height)
+        self.listening_bubble.bind(texture_size=lambda instance, value: self.update_bubble_height(instance, value, self.listening_container))
+        self.listening_container.add_widget(self.listening_bubble)
+        self.listening_container.add_widget(Label(size_hint_x=0.2))
+        self.chat_history.add_widget(self.listening_container)
+        self.chat_history.height += self.listening_bubble.height + 10
+        self.scroll_view.scroll_y = 0
+        
+        # Start recognition
+        threading.Thread(target=self._start_voice_recognition).start()
+
+    def _start_voice_recognition(self):
+        if IS_ANDROID:
+            self._android_voice_recognition()
+        else:
+            self._pc_voice_recognition()
+
+    def _android_voice_recognition(self):
+        def on_result(requestCode, resultCode, intent_data):
+            if resultCode == -1:  # RESULT_OK
+                results = intent_data.getStringArrayListExtra(
+                    SpeechRecognizer.RESULTS_RECOGNITION)
+                if results and len(results) > 0:
+                    Clock.schedule_once(lambda dt: self._handle_voice_result(results[0]))
+            
+            # Remove listening message
+            Clock.schedule_once(lambda dt: self._remove_listening_message())
+
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        currentActivity = cast('android.app.Activity', PythonActivity.mActivity)
+        
+        activity.bind(on_activity_result=on_result)
+        
+        Intent = autoclass('android.content.Intent')
+        SpeechRecognizer = autoclass('android.speech.SpeechRecognizer')
+        
+        intent = Intent(SpeechRecognizer.ACTION_RECOGNIZE_SPEECH)
+        intent.putExtra(SpeechRecognizer.EXTRA_LANGUAGE_MODEL,
+                       SpeechRecognizer.LANGUAGE_MODEL_FREE_FORM)
+        
+        currentActivity.startActivityForResult(intent, 1001)
+
+    def _pc_voice_recognition(self):
+        r = sr.Recognizer()
+        try:
+            with sr.Microphone() as source:
+                try:
+                    audio = r.listen(source, timeout=5)
+                    text = r.recognize_google(audio)
+                    Clock.schedule_once(lambda dt: self._handle_voice_result(text))
+                except sr.UnknownValueError:
+                    Clock.schedule_once(lambda dt: self.add_message("Sorry, I couldn't understand that.", align="left"))
+                except sr.RequestError:
+                    Clock.schedule_once(lambda dt: self.add_message("Speech service unavailable.", align="left"))
+                except sr.WaitTimeoutError:
+                    Clock.schedule_once(lambda dt: self.add_message("No speech detected. Try again.", align="left"))
+        except Exception as e:
+            Clock.schedule_once(lambda dt: self.add_message(f"Mic error: {str(e)}", align="left"))
+        finally:
+            Clock.schedule_once(lambda dt: self._remove_listening_message())
+
+    def _remove_listening_message(self):
+        if hasattr(self, 'listening_container') and self.listening_container in self.chat_history.children:
+            self.chat_history.remove_widget(self.listening_container)
+            # Recalculate chat history height
+            total_height = 0
+            for child in self.chat_history.children:
+                total_height += child.height + 10
+            self.chat_history.height = total_height
+
+    def _handle_voice_result(self, text):
+        self._remove_listening_message()
+        self.user_input.text = text
+        self.send_message()
+    
 
     def update_bg(self, *args):
         self.bg.size = args[0].size
